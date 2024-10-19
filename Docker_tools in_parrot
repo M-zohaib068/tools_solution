@@ -1,0 +1,131 @@
+# Use the Parrot OS base image instead of Kali
+FROM parrotsec/security:latest
+
+# Set environment variables
+ENV HOME /root
+ENV DEBIAN_FRONTEND=noninteractive
+ENV GOROOT /usr/local/go
+ENV GOPATH /root/go
+ENV PATH ${GOPATH}/bin:${GOROOT}/bin:${PATH}
+
+# Set the working directory
+WORKDIR /root
+
+# Create toolkit and wordlists directories
+RUN mkdir -p ${HOME}/toolkit && mkdir -p ${HOME}/wordlists
+
+# Update package lists and install necessary packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential tmux gcc iputils-ping git vim wget awscli tzdata curl make \
+    whois python3 python3-pip perl nikto dnsutils net-tools zsh nano \
+    sqlmap dirb cpanminus python3-pycurl python3-dnspython libldns-dev libcurl4-openssl-dev \
+    libxml2 libxml2-dev libxslt1-dev ruby-dev libgmp-dev zlib1g-dev libpcap-dev \
+    libwww-perl hydra dnsrecon powerline fonts-powerline python3-venv && \
+    rm -rf /var/lib/apt/lists/*
+
+
+#go start
+
+# Install Go
+RUN wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz -O /opt/go.tar.gz && \
+    tar -C /opt -xzf /opt/go.tar.gz && \
+    rm /opt/go.tar.gz && \
+    mv /opt/go /usr/local
+
+# Set environment variables for Go
+ENV GOROOT /usr/local/go
+ENV GOPATH /root/go
+ENV PATH ${GOPATH}/bin:${GOROOT}/bin:${PATH}
+
+#Additional go tools tested ok
+RUN export GO111MODULE=on && \
+    go install -v github.com/owasp-amass/amass/v4/...@master && \
+    go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && \
+    go install -v github.com/OJ/gobuster/v3@latest && \
+    git clone https://github.com/gitleaks/gitleaks.git && \
+    cd gitleaks && \
+    make build && \
+    rm -rf gitleaks && \
+    go install github.com/hahwul/dalfox/v2@latest && \
+    go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest && \
+    go install github.com/tomnomnom/waybackurls@latest && \
+    go install github.com/tomnomnom/httprobe@latest && \
+    go install -v github.com/haccer/subjack@latest 
+
+
+# Install gf and configure patterns
+RUN go install -v github.com/tomnomnom/gf@latest && \
+    mkdir -p /root/.gf && \
+    cp $(go env GOPATH)/pkg/mod/github.com/tomnomnom/gf@*/examples/*.json /root/.gf/ && \
+    git clone https://github.com/1ndianl33t/Gf-Patterns.git /root/Gf-Patterns && \
+    cp /root/Gf-Patterns/*.json /root/.gf/ && \
+    rm -rf /root/Gf-Patterns
+
+# Install nuclei
+RUN GO111MODULE=on go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+# Clone Nuclei templates (uncomment this if needed)
+#RUN git clone https://github.com/projectdiscovery/nuclei-templates.git ${HOME}/wordlists/nuclei-templates
+
+
+
+
+
+#go end
+
+
+
+
+#python start
+
+# Create a Python virtual environment
+RUN python3 -m venv /root/venv
+
+# Activate the virtual environment and install Python tools using pip
+RUN /root/venv/bin/pip install --upgrade pip && \
+    /root/venv/bin/pip install requests beautifulsoup4 scrapy mechanize \
+    flask django sqlmap && \
+    rm -rf /root/.cache/pip
+
+#python end
+
+#wordlist start
+
+# Install SecLists
+RUN git clone --depth 1 https://github.com/danielmiessler/SecLists.git ${HOME}/wordlists/SecLists
+
+
+#wordlist end
+
+#Additional advance tools start
+
+
+# Clone and set up Katoolin
+RUN git clone https://github.com/LionSec/katoolin.git ${HOME}/toolkit/katoolin && \
+    cd ${HOME}/toolkit/katoolin && \
+    chmod +x katoolin.py
+
+# Clone Sn1per repository
+RUN git clone https://github.com/1N3/Sn1per.git ${HOME}/toolkit/Sn1per && \
+    cd ${HOME}/toolkit/Sn1per # && \
+  #  bash install.sh
+  
+  # Clone LazyScript repository and set permissions
+RUN git clone https://github.com/arismelachroinos/lscript.git ${HOME}/toolkit/lscript && \
+    cd ${HOME}/toolkit/lscript # && \
+   # chmod +x install.sh
+    #How to run it
+#(make sure you are a root user)
+#open terminal
+#type  "l"
+#press enter
+
+
+#Additional advance tools end
+
+# Clean up
+RUN apt-get clean
+
+# Default command to open an interactive shell with the virtual environment activated
+CMD ["/bin/bash", "-c", "source /root/venv/bin/activate && exec zsh"]
+
